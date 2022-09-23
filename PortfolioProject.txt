@@ -1,0 +1,94 @@
+--selecting the data that we are going to use in this case study:  
+select location, date, total_cases, total_deaths from `Portfolio_Project.covid_deaths`
+order by location, date desc;
+
+
+-- Looking at total cases and total deaths and finding out death rate due to COVID-19. 
+--  Date wise death rate 
+select location, date, total_cases, total_deaths,
+(nullif(total_deaths,0)/nullif(total_cases,0))*100 as Death_to_cases_ratio 
+from `Portfolio_Project.covid_deaths`
+order by total_cases desc;
+
+
+-- Overall death rate as of 2022-09-2017
+select location, round(avg(Death_rate),2) as Avg_death_rate from 
+(select location, date, total_cases, total_deaths, 
+(nullif(total_deaths,0)/nullif(total_cases,0))*100 as Death_rate 
+from `Portfolio_Project.covid_deaths`
+order by total_cases desc) group by location;
+
+
+-- Percentage of people infected by COVID-19 till 2022-09-17
+select CD.continent ,CD.location, total_cases,
+ population, round((total_cases/population)*100,2)
+ as Infectivity_rate from `Portfolio_Project.covid_deaths` as CD 
+ inner join `Portfolio_Project.covid_vaccinations` as CV
+ on CD.location = CV.location
+where CD.date = (select max(date) from `Portfolio_Project.covid_deaths`)and CD.continent is not null
+group by CD.continent, CD.location, total_cases, population
+order by continent, location;
+
+
+-- Countries with highest death rates till 2022-09-17
+select CD.continent ,CD.location, total_deaths,
+ population, round((total_deaths/population)*100,2)
+ as Death_rates from `Portfolio_Project.covid_deaths` as CD 
+ inner join `Portfolio_Project.covid_vaccinations` as CV
+ on CD.location = CV.location
+where CD.date = (select max(date) from `Portfolio_Project.covid_deaths`) and CD.continent is not null
+group by CD.continent, CD.location, total_deaths,population
+order by Death_rates desc;
+
+-- Perecntage of population getting vacciantion till 2022-09-17
+select CD.continent ,CD.location, people_vaccinated,
+ population, round((people_vaccinated/population)*100,2)
+ as vaccination_rate from `Portfolio_Project.covid_deaths` as CD 
+ inner join `Portfolio_Project.covid_vaccinations` as CV
+ on CD.location = CV.location
+where CD.date = (select max(date) from `Portfolio_Project.covid_deaths`)
+and CD.continent is not null
+group by CD.continent, CD.location, people_vaccinated, population
+order by continent, location;
+
+-- Rolling People Vaccinated:
+CREATE table `Portfolio_Project.PopvsVac`
+as
+(
+Select continent, location, date, population, new_vaccinations
+, SUM(cast(new_vaccinations as int64)) OVER (Partition by location Order by location, date) as RollingPeopleVaccinated
+From `Portfolio_Project.covid_vaccinations`
+where continent is not null 
+order by continent, location);
+
+-- Percent rolling people vaccinated 
+select continent, location, population, new_vaccinations, 
+round((RollingPeopleVaccinated/population)*100,2) from `Portfolio_Project.PopvsVac`;
+
+
+-- people getting fully vaccinated as percent of people getting vaccinations
+CREATE table `Portfolio_Project.total_people_vaccinated`
+as
+(
+Select continent, location, date, population, people_vaccinated
+, SUM(cast(people_vaccinated as int64)) OVER (Partition by location Order by location, date) as RollingPeopleVaccinated
+From `Portfolio_Project.covid_vaccinations`
+where continent is not null 
+order by continent, location);
+
+CREATE table `Portfolio_Project.total_people_fully_vaccinated`
+as
+(
+Select continent, location, date, population, people_fully_vaccinated
+, SUM(cast(people_fully_vaccinated as int64)) OVER (Partition by location Order by location, date) as RollingPeopleFullyVaccinated
+From `Portfolio_Project.covid_vaccinations`
+where continent is not null 
+order by continent, location);
+
+Select TPV.continent, TPV.location, TPV.date, TPV.population
+,(RollingPeopleFullyVaccinated/nullif(RollingPeopleVaccinated,0))*100 from 
+`Portfolio_Project.total_people_vaccinated` as TPV inner join
+`Portfolio_Project.total_people_fully_vaccinated` as TPFV
+on TPV.location = TPFV.location
+order by TPV.continent, TPV.location;
+
